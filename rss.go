@@ -119,8 +119,6 @@ func fetchFeed(fp FeedParser, feedName string, account *RSSFeed, config *config.
 			} else {
 				break
 			}
-		} else {
-			fmt.Printf("%s: Skipping item due to older date: %v\n", feedName, item.Title)
 		}
 	}
 	if err == nil {
