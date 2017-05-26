@@ -122,7 +122,7 @@ func fetchFeed(fp FeedParser, feedName string, account *RSSFeed, config *config.
 		}
 	}
 	if err == nil {
-		account.LastFetched = account.LastQueried
+		account.LastFetched = time.Now().Unix()
 	}
 
 	<-fp.sem
