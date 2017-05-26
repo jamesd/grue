@@ -95,9 +95,8 @@ func fetchFeed(fp FeedParser, feedName string, account *RSSFeed, config *config.
 		date, newer := hasNewerDate(item, account.LastFetched)
 		if newer == DateNewer {
 			if exists {
-				fmt.Printf("%s: Have newer date for existing item %v (%v > %v), sending email\n", feedName, item.GUID, date.Unix(), account.LastFetched)
-			} else {
-				fmt.Printf("%s: Have new item %v, sending email\n", feedName, item.GUID)
+				account.GUIDList[item.GUID] = struct{}{}
+				break
 			}
 			e := createEmail(feedName, feed.Title, item, date, account.config, config)
 			err = e.Send(fp.messages)
@@ -110,7 +109,6 @@ func fetchFeed(fp FeedParser, feedName string, account *RSSFeed, config *config.
 		} else if newer == NoDate {
 			// _, exists := guids[item.GUID]
 			if !exists {
-				fmt.Printf("%s: Have new item with no date %v\n", feedName, item.Title)
 				e := createEmail(feedName, feed.Title, item, date, account.config, config)
 				err = e.Send(fp.messages)
 			}
@@ -119,6 +117,8 @@ func fetchFeed(fp FeedParser, feedName string, account *RSSFeed, config *config.
 			} else {
 				break
 			}
+		} else {
+			account.GUIDList[item.GUID] = struct{}{}
 		}
 	}
 	if err == nil {
