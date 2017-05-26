@@ -95,7 +95,7 @@ func fetchFeed(fp FeedParser, feedName string, account *RSSFeed, config *config.
 		date, newer := hasNewerDate(item, account.LastFetched)
 		if newer == DateNewer {
 			if exists {
-				fmt.Printf("%s: Have newer date for existing item %v (%v > %v), sending email\n", feedName, item.GUID, date, account.LastFetched)
+				fmt.Printf("%s: Have newer date for existing item %v (%v > %v), sending email\n", feedName, item.GUID, date.Unix(), account.LastFetched)
 			} else {
 				fmt.Printf("%s: Have new item %v, sending email\n", feedName, item.GUID)
 			}
