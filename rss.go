@@ -17,47 +17,26 @@ type FeedParser struct {
 
 type RSSFeed struct {
 	config      config.AccountConfig
-	LastFetched int64               `json:",omitempty"`
 	LastQueried int64               `json:",omitempty"`
 	NextQuery   int64               `json:",omitempty"`
 	Tries       int                 `json:",omitempty"`
 	GUIDList    map[string]struct{} `json:",omitempty"`
 }
 
-type DateType int
-
-const (
-	NoDate DateType = iota
-	DateNewer
-	DateOlder
-)
-
-func hasNewerDate(item *gofeed.Item, lastFetched int64) (time.Time, DateType) {
+func getDate(item *gofeed.Item) time.Time {
 	if item.PublishedParsed != nil {
-		if item.PublishedParsed.Unix() > lastFetched {
-			return *item.PublishedParsed, DateNewer
-		} else {
-			return *item.PublishedParsed, DateOlder
-		}
+		return *item.PublishedParsed
 	} else if item.UpdatedParsed != nil {
-		if item.UpdatedParsed.Unix() > lastFetched {
-			return *item.UpdatedParsed, DateNewer
-		} else {
-			return *item.UpdatedParsed, DateOlder
-		}
+		return *item.UpdatedParsed
 	} else if date, exists := item.Extensions["dc"]["date"]; exists {
 		dateParsed, err := time.Parse(time.RFC3339, date[0].Value)
 		if err != nil {
 			fmt.Printf("Can't parse (%v) as dc:date for (%v)\n", date, item.Link)
-			return time.Now(), NoDate
+			return time.Now()
 		}
-		if dateParsed.Unix() > lastFetched {
-			return dateParsed, DateNewer
-		} else {
-			return dateParsed, DateOlder
-		}
+		return dateParsed
 	}
-	return time.Now(), NoDate
+	return time.Now()
 }
 
 func fetchFeed(fp FeedParser, feedName string, account *RSSFeed, config *config.GrueConfig) {
@@ -92,37 +71,16 @@ func fetchFeed(fp FeedParser, feedName string, account *RSSFeed, config *config.
 	}
 	for _, item := range feed.Items {
 		_, exists := guids[item.GUID]
-		date, newer := hasNewerDate(item, account.LastFetched)
-		if newer == DateNewer {
-			if exists {
-				account.GUIDList[item.GUID] = struct{}{}
-				break
-			}
+		date := getDate(item)
+		if !exists {
 			e := createEmail(feedName, feed.Title, item, date, account.config, config)
 			err = e.Send(fp.messages)
-			if err == nil {
-				account.GUIDList[item.GUID] = struct{}{}
-			} else {
-				// if err != nil {
-				break
-			}
-		} else if newer == NoDate {
-			// _, exists := guids[item.GUID]
-			if !exists {
-				e := createEmail(feedName, feed.Title, item, date, account.config, config)
-				err = e.Send(fp.messages)
-			}
-			if err == nil {
-				account.GUIDList[item.GUID] = struct{}{}
-			} else {
-				break
-			}
-		} else {
-			account.GUIDList[item.GUID] = struct{}{}
 		}
-	}
-	if err == nil {
-		account.LastFetched = time.Now().Unix()
+		if err == nil {
+			account.GUIDList[item.GUID] = struct{}{}
+		} else {
+			break
+		}
 	}
 
 	<-fp.sem
