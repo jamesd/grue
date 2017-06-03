@@ -17,26 +17,47 @@ type FeedParser struct {
 
 type RSSFeed struct {
 	config      config.AccountConfig
+	LastFetched int64               `json:",omitempty"`
 	LastQueried int64               `json:",omitempty"`
 	NextQuery   int64               `json:",omitempty"`
 	Tries       int                 `json:",omitempty"`
 	GUIDList    map[string]struct{} `json:",omitempty"`
 }
 
-func getDate(item *gofeed.Item) time.Time {
+type DateType int
+
+const (
+	NoDate DateType = iota
+	DateNewer
+	DateOlder
+)
+
+func hasNewerDate(item *gofeed.Item, lastFetched int64) (time.Time, DateType) {
 	if item.PublishedParsed != nil {
-		return *item.PublishedParsed
+		if item.PublishedParsed.Unix() > lastFetched {
+			return *item.PublishedParsed, DateNewer
+		} else {
+			return *item.PublishedParsed, DateOlder
+		}
 	} else if item.UpdatedParsed != nil {
-		return *item.UpdatedParsed
+		if item.UpdatedParsed.Unix() > lastFetched {
+			return *item.UpdatedParsed, DateNewer
+		} else {
+			return *item.UpdatedParsed, DateOlder
+		}
 	} else if date, exists := item.Extensions["dc"]["date"]; exists {
 		dateParsed, err := time.Parse(time.RFC3339, date[0].Value)
 		if err != nil {
 			fmt.Printf("Can't parse (%v) as dc:date for (%v)\n", date, item.Link)
-			return time.Now()
+			return time.Now(), NoDate
 		}
-		return dateParsed
+		if dateParsed.Unix() > lastFetched {
+			return dateParsed, DateNewer
+		} else {
+			return dateParsed, DateOlder
+		}
 	}
-	return time.Now()
+	return time.Now(), NoDate
 }
 
 func fetchFeed(fp FeedParser, feedName string, account *RSSFeed, config *config.GrueConfig) {
@@ -71,8 +92,8 @@ func fetchFeed(fp FeedParser, feedName string, account *RSSFeed, config *config.
 	}
 	for _, item := range feed.Items {
 		_, exists := guids[item.GUID]
-		date := getDate(item)
-		if !exists {
+		date, newer := hasNewerDate(item, account.LastFetched)
+		if !exists || (item.GUID == "" && newer == DateNewer) {
 			e := createEmail(feedName, feed.Title, item, date, account.config, config)
 			err = e.Send(fp.messages)
 		}
@@ -81,6 +102,9 @@ func fetchFeed(fp FeedParser, feedName string, account *RSSFeed, config *config.
 		} else {
 			break
 		}
+	}
+	if err == nil {
+		account.LastFetched = time.Now().Unix()
 	}
 
 	<-fp.sem
